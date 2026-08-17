@@ -7,3 +7,5 @@ services:
     envVars:
       - key: OWNER_TOKEN
         value: dev-token
+      - key: DATABASE_URL
+        sync: false

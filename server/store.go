@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // Profile 是主页展示的个人信息，单行数据。
@@ -40,8 +40,8 @@ type Store struct {
 	db *sql.DB
 }
 
-func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+func Open(databaseURL string) (*Store, error) {
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *Store) Close() error {
 func (s *Store) migrate() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS logs (
-			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 			type       TEXT NOT NULL,
 			title      TEXT NOT NULL,
 			content    TEXT NOT NULL,
@@ -72,7 +72,7 @@ func (s *Store) migrate() error {
 			updated_at TEXT NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS profile (
-			id             INTEGER PRIMARY KEY CHECK (id = 1),
+			id             BIGINT PRIMARY KEY CHECK (id = 1),
 			name           TEXT NOT NULL,
 			phone          TEXT NOT NULL,
 			email          TEXT NOT NULL,
@@ -84,18 +84,20 @@ func (s *Store) migrate() error {
 }
 
 func (s *Store) seed() error {
-	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM profile`).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
 	_, err := s.db.Exec(`
 		INSERT INTO profile (id, name, phone, email, tech_direction, learning_goals)
-		VALUES (1, '你的名字', '', '', '', '');
+		VALUES (1, '你的名字', '', '', '', '')
+		ON CONFLICT (id) DO NOTHING
 	`)
 	return err
+}
+
+// reset 清空两张表并重置自增序列，随后重新种子个人信息，供测试隔离使用。
+func (s *Store) reset() error {
+	if _, err := s.db.Exec(`TRUNCATE logs, profile RESTART IDENTITY`); err != nil {
+		return err
+	}
+	return s.seed()
 }
 
 func (s *Store) GetProfile() (Profile, error) {
@@ -113,7 +115,7 @@ func (s *Store) GetProfile() (Profile, error) {
 func (s *Store) UpdateProfile(p Profile) error {
 	_, err := s.db.Exec(`
 		UPDATE profile
-		SET name = ?, phone = ?, email = ?, tech_direction = ?, learning_goals = ?
+		SET name = $1, phone = $2, email = $3, tech_direction = $4, learning_goals = $5
 		WHERE id = 1
 	`, p.Name, p.Phone, p.Email, p.TechDirection, p.LearningGoals)
 	return err
@@ -121,14 +123,12 @@ func (s *Store) UpdateProfile(p Profile) error {
 
 func (s *Store) CreateLog(logType, title, content string) (Log, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.Exec(`
+	var id int64
+	err := s.db.QueryRow(`
 		INSERT INTO logs (type, title, content, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, logType, title, content, now, now)
-	if err != nil {
-		return Log{}, err
-	}
-	id, err := res.LastInsertId()
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+	`, logType, title, content, now, now).Scan(&id)
 	if err != nil {
 		return Log{}, err
 	}
@@ -139,7 +139,7 @@ func (s *Store) ListLogs(logType string) ([]Log, error) {
 	query := `SELECT id, type, title, content, created_at, updated_at FROM logs`
 	args := []any{}
 	if logType != "" {
-		query += ` WHERE type = ?`
+		query += ` WHERE type = $1`
 		args = append(args, logType)
 	}
 	query += ` ORDER BY id DESC`
@@ -164,7 +164,7 @@ func (s *Store) GetLog(id int64) (Log, error) {
 	var l Log
 	err := s.db.QueryRow(`
 		SELECT id, type, title, content, created_at, updated_at
-		FROM logs WHERE id = ?
+		FROM logs WHERE id = $1
 	`, id).Scan(&l.ID, &l.Type, &l.Title, &l.Content, &l.CreatedAt, &l.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return l, ErrNotFound

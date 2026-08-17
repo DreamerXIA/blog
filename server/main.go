@@ -34,9 +34,12 @@ func resolveStaticDir() string {
 func main() {
 	port := envOr("PORT", "8080")
 	token := envOr("OWNER_TOKEN", "dev-token")
-	dbPath := envOr("DB_PATH", "blog.db")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("缺少 DATABASE_URL 环境变量（Postgres 连接串，需含 SSL）")
+	}
 
-	store, err := Open(dbPath)
+	store, err := Open(databaseURL)
 	if err != nil {
 		log.Fatalf("打开数据库失败: %v", err)
 	}

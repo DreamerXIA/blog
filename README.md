@@ -4,7 +4,7 @@
 
 - 前端：React 18 + Vite（单页滚动布局）
 - 后端：Go（标准库 `net/http`，Go 1.22+ 方法路由）
-- 持久化：SQLite（`modernc.org/sqlite` 纯 Go 驱动，免 CGO）
+- 持久化：PostgreSQL（Neon 托管，`pgx/v5` 驱动）
 - 架构：单一 Go 服务同时托管打包后的前端静态文件与 JSON API
 
 ## 线上访问
@@ -17,7 +17,7 @@
 
 - Go 1.22+（本项目使用 1.26）
 - Node.js 18+ 与 npm
-- 无需单独安装数据库（SQLite 为单文件，纯 Go 驱动自动创建）
+- 无需本地安装数据库，但需一个可连的 Postgres（Neon 免费档即可），通过 `DATABASE_URL` 指定
 
 ### 方式一：开发模式（前后端分离，热更新）
 
@@ -50,14 +50,15 @@ npm run dev
 | :--- | :--- | :--- |
 | `PORT` | `8080` | 服务监听端口 |
 | `OWNER_TOKEN` | `dev-token` | 写入（创建日志 / 更新个人信息）所需的 token，生产环境务必改为强密钥 |
-| `DB_PATH` | `blog.db` | SQLite 数据库文件路径 |
+| `DATABASE_URL` | 无（必填） | Postgres 连接串（Neon 控制台获取，需含 SSL） |
+| `TEST_DATABASE_URL` | 无 | 测试用 Postgres 连接串；缺省时 `go test` 报错中止 |
 | `STATIC_DIR` | 自动探测 | 前端静态目录；默认依次尝试 `../web/dist`、`web/dist` |
 
 ## 技术选型与原因
 
 - **React**：需求指定前端必须使用 React，生态成熟、组件化便于组织单页布局。
 - **Go 后端**：需求指定后端使用 Go。理由：单一静态二进制部署简单、标准库 `net/http`（1.22+ 方法路由 + 路径参数）对 MVP 的 6 个 API 已足够，无需引入 gin/chi 等框架；并发模型适合作为单服务同时承载静态文件与 API。
-- **SQLite（`modernc.org/sqlite`）**：纯 Go 实现、免 CGO，本地零配置即可启动，MVP 规模下单表数据量远未触及 SQLite 上限。代价是线上免费实例的磁盘为临时盘，数据可能随重启重置（见「未完成与后续计划」）。
+- **PostgreSQL（Neon 托管，`pgx/v5` 驱动）**：数据持久化到托管 Postgres，不再随 Render 临时盘重置。详见 `docs/adr/0002-postgres-neon.md`。代价是 Neon 免费档 5 分钟无活动即挂起、首次请求冷启动约几百毫秒，且本地开发/测试需联网连 Neon 云。
 - **单服务架构**：MVP 下前后端分离托管（如 Vercel + 独立 API）只会增加部署与跨域复杂度，单进程即可完成「前端页面 → API → 持久化」完整闭环。详见 `docs/adr/0001-single-service-sqlite.md`。
 
 ## 数据模型
@@ -68,7 +69,7 @@ npm run dev
 
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
-| `id` | INTEGER | 主键，自增 |
+| `id` | BIGINT | 主键，自增（identity） |
 | `type` | TEXT | 枚举：`work` / `study` / `daily` / `summary` |
 | `title` | TEXT | 标题（必填） |
 | `content` | TEXT | 正文（必填） |
@@ -79,7 +80,7 @@ npm run dev
 
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
-| `id` | INTEGER | 恒为 1，保证单行 |
+| `id` | BIGINT | 恒为 1，保证单行 |
 | `name` | TEXT | 姓名 |
 | `phone` | TEXT | 电话 |
 | `email` | TEXT | 邮箱 |
@@ -123,7 +124,7 @@ npm run dev
 - 日志创建（工作 / 学习 / 日报 / 总结）、列表展示（时间倒序）、详情展开
 - 按类型过滤日志
 - 写入受 Owner token 保护，缺失或错误 token 返回 401
-- 服务端持久化（SQLite），刷新 / 换设备后内容可见
+- 服务端持久化（PostgreSQL/Neon），刷新 / 换设备后内容可见
 - 健康检查端点 `/api/health`
 - 生产形态单服务（Go 托管前端静态文件 + API）
 - API 层自动化测试（`net/http/httptest` 覆盖读写、鉴权拒绝、校验错误、过滤）
@@ -133,7 +134,7 @@ npm run dev
 - 日志的编辑与删除（MVP 仅「创建 + 查看」）
 - 日报格式化 / 一键复制汇报内容
 - 日志分页、标签、图片、评论
-- 线上免费实例的 SQLite 数据在临时盘上，重启 / 重新部署可能重置；后续切换到托管 Postgres 或持久盘
+- Render 免费实例无流量约 15 分钟后 spin down，首次访问有冷启动延迟；Neon 免费档 5 分钟无活动即挂起（数据不丢，但首查约几百毫秒）
 - 完整的 E2E 测试（当前以 API 层测试为准，前端以浏览器手工验证）
 
 ## AI 使用说明
@@ -143,7 +144,7 @@ npm run dev
 ## 验证方式
 
 ```bash
-# 后端 API 测试
+# 后端 API 测试（需先 export TEST_DATABASE_URL=<Neon 测试库连接串>）
 cd server && go test ./...
 
 # 手动验证核心闭环（生产形态）

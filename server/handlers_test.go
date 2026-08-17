@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+	"os"
 	"strconv"
 	"testing"
 )
@@ -15,11 +15,18 @@ const testToken = "test-token"
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	store, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Fatal("缺少 TEST_DATABASE_URL 环境变量（测试用 Postgres 连接串）")
+	}
+	store, err := Open(url)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { store.Close() })
+	if err := store.reset(); err != nil {
+		t.Fatalf("reset store: %v", err)
+	}
 	s := &server{store: store, token: testToken}
 	ts := httptest.NewServer(s.routes())
 	t.Cleanup(ts.Close)

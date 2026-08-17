@@ -8,6 +8,8 @@
 
 交付一个最小可用的全栈系统：一个 React 单页前端，展示个人信息、支持「写日志」表单与带类型过滤的日志列表；一个 Go 后端，将数据持久化到 SQLite，并同时托管 JSON API 与打包后的前端静态文件。访客只读，Owner 通过 token 写入。可本地运行并部署到 Render 提供公网访问。
 
+> 注：本文中「持久化到 SQLite」的决定已被 [ADR-0002](./adr/0002-postgres-neon.md) 取代（迁移到 Neon 托管 Postgres）；其余需求（领域模型、API 契约、权限、测试 seam）仍有效。
+
 ## User Stories
 
 1. As a 访客，I want 打开页面即看到 Owner 的姓名、联系方式、技术方向与学习目标，so that 我能快速了解他是谁。
