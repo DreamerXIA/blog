@@ -1,4 +1,4 @@
-module github.com/iridestar/blog
+module github.com/DreamerXIA/blog
 
 go 1.26.5
 
