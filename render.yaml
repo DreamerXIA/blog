@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: blog
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: OWNER_TOKEN
+        sync: false
+        value: dev-token
+      - key: DB_PATH
+        sync: false
+        value: /var/data/blog.db

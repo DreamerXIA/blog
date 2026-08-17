@@ -1,0 +1,16 @@
+# Go
+server/blog.db
+server/blog
+server/*.exe
+
+# Node
+node_modules/
+web/dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+
+# 工具产物
+.playwright-mcp/
