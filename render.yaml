@@ -6,5 +6,4 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: OWNER_TOKEN
-        sync: false
         value: dev-token
