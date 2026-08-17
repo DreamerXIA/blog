@@ -8,6 +8,3 @@ services:
       - key: OWNER_TOKEN
         sync: false
         value: dev-token
-      - key: DB_PATH
-        sync: false
-        value: /var/data/blog.db
